@@ -103,7 +103,7 @@ typedef struct renderOptions_t {
     int fps;
     int help;
 
-    int plotPids, plotPidSum, plotGyros, plotMotors;
+    int plotPids, plotPidSum, plotGyros, plotMotors, plotSonar;
     int drawPidTable, drawSticks, drawCraft, drawTime;
 
     int pidSmoothing, gyroSmoothing, motorSmoothing;
@@ -194,7 +194,7 @@ static const colorAlpha_t crosshairColor = {0.75, 0.75, 0.75, 0.5};
 static const renderOptions_t defaultOptions = {
     .imageWidth = 1920, .imageHeight = 1080,
     .fps = 30, .help = 0, .propStyle = PROP_STYLE_PIE_CHART,
-    .plotPids = false, .plotPidSum = false, .plotGyros = true, .plotMotors = true,
+    .plotPids = false, .plotPidSum = false, .plotGyros = true, .plotMotors = true, .plotSonar = false,
     .pidSmoothing = 4, .gyroSmoothing = 2, .motorSmoothing = 2,
     .drawCraft = true, .drawPidTable = true, .drawSticks = true, .drawTime = true,
     .gyroUnit = UNIT_RAW,
@@ -209,7 +209,7 @@ static const renderOptions_t defaultOptions = {
 extern cairo_font_face_t* cairo_ft_font_face_create_for_ft_face(FT_Face face, int load_flags);
 
 static renderOptions_t options;
-static expoCurve_t *pitchStickCurve, *pidCurve, *gyroCurve, *accCurve, *motorCurve, *servoCurve;
+static expoCurve_t *pitchStickCurve, *pidCurve, *gyroCurve, *accCurve, *motorCurve, *servoCurve, *sonarCurve;
 
 static semaphore_t pngRenderingSem;
 static bool pngRenderingSemCreated = false;
@@ -1069,6 +1069,8 @@ void renderAnimation(uint32_t startFrame, uint32_t endFrame)
     // Default Servo range is [1020...2000] but we'll just use [1000...2000] for simplicity
     servoCurve = expoCurveCreate(-1500, 1.0, 1000, 1.0, 2);
 
+	sonarCurve = expoCurveCreate(0, 1.0, 200, 1.0, 1);
+
     int durationSecs = (outputFrames + (options.fps - 1)) / (options.fps);
     int durationMins = durationSecs / 60;
     durationSecs %= 60;
@@ -1128,6 +1130,22 @@ void renderAnimation(uint32_t startFrame, uint32_t endFrame)
             }
             cairo_restore(cr);
         }
+
+		//Plot sonar
+		if (options.plotSonar) {
+			int sonarGraphHeight = (int)(options.imageHeight * .40);
+			cairo_save(cr);
+			{
+				//Move up
+				cairo_translate(cr, 0, options.imageHeight * 0.9);
+				drawAxisLine(cr);
+				cairo_set_line_width(cr, 2.5);
+				plotLine(cr, fieldMeta.motorColors[0], windowStartTime, windowEndTime, firstFrameIndex,
+					flightLog->mainFieldIndexes.sonarRaw, sonarCurve, sonarGraphHeight);
+			}
+			drawAxisLabel(cr, "Sonar");
+			cairo_restore(cr);
+		}
 
         //Plot the lower PID graphs
         cairo_save(cr);
@@ -1325,9 +1343,10 @@ void printUsage(const char *argv0)
         "   --[no-]draw-sticks     Show RC command sticks (default on)\n"
         "   --[no-]draw-time       Show frame number and time in bottom right (default on)\n"
         "   --[no-]plot-motor      Draw motors on the upper graph (default on)\n"
-        "   --[no-]plot-pid        Draw PIDs on the lower graph (default off)\n"
+		"   --[no-]plot-sonar      Draw sonar on the lower graph (default off)\n"
+		"   --[no-]plot-pid        Draw PIDs on the lower graph (default off)\n"
         "   --[no-]plot-gyro       Draw gyroscopes on the lower graph (default on)\n"
-        "   --smoothing-pid <n>    Smoothing window for the PIDs (default %d)\n"
+		"   --smoothing-pid <n>    Smoothing window for the PIDs (default %d)\n"
         "   --smoothing-gyro <n>   Smoothing window for the gyroscopes (default %d)\n"
         "   --smoothing-motor <n>  Smoothing window for the motors (default %d)\n"
         "   --unit-gyro <raw|degree>  Unit for the gyro values in the table (default %s)\n"
@@ -1420,10 +1439,12 @@ void parseCommandlineOptions(int argc, char **argv)
             {"plot-pid", no_argument, &options.plotPids, 1},
             {"plot-gyro", no_argument, &options.plotGyros, 1},
             {"plot-motor", no_argument, &options.plotMotors, 1},
-            {"no-plot-pid", no_argument, &options.plotPids, 0},
+			{"plot-sonar", no_argument, &options.plotSonar, 1 },
+			{"no-plot-pid", no_argument, &options.plotPids, 0 },
             {"no-plot-gyro", no_argument, &options.plotGyros, 0},
             {"no-plot-motor", no_argument, &options.plotMotors, 0},
-            {"draw-pid-table", no_argument, &options.drawPidTable, 1},
+			{"no-plot-sonar", no_argument, &options.plotSonar, 0 },
+			{"draw-pid-table", no_argument, &options.drawPidTable, 1 },
             {"draw-craft", no_argument, &options.drawCraft, 1},
             {"draw-sticks", no_argument, &options.drawSticks, 1},
             {"draw-time", no_argument, &options.drawTime, 1},
